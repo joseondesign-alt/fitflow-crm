@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">FitFlow</title>
+  <rect width="64" height="64" rx="16" fill="#062e29"/>
+  <path d="M16 24v16M12 28v8M20 28v8M16 32h32M48 24v16M44 28v8M52 28v8" fill="none" stroke="#9cf5bd" stroke-linecap="round" stroke-width="4"/>
+  <path d="M23 33c4-1 5-8 9-8s4 14 8 14 4-7 8-8" fill="none" stroke="#36d399" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
+</svg>
