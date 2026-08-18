@@ -240,5 +240,72 @@ function AgentOrb({ large = false }: { large?: boolean }) { const canvasRef = us
 function EventModal({ contacts, onClose, onSubmit }: { contacts: Contact[]; onClose: () => void; onSubmit: (form: FormData) => void }) { return <Modal title="Nouvel événement" detail="Un événement actualise le parcours et le journal CRM." onClose={onClose}><form action={onSubmit} className="modal-form"><label>Contact<select name="contact" required><option value="">Choisir un contact</option>{contacts.map((contact) => <option value={contact.id} key={contact.id}>{contact.name}</option>)}</select></label><label>Événement<select name="type"><option>RDV planifié</option><option>Essai réalisé</option><option>Inscription client</option><option>Résiliation</option></select></label><label>Note interne<textarea name="note" placeholder="Ex. RDV confirmé par téléphone" /></label><div className="notice"><b>Automatisations prévues</b><span>Airtable, Brevo, WhatsApp et Make sont ajoutés au journal de simulation.</span></div><button className="button" type="submit">Enregistrer l’événement</button></form></Modal>; }
 function ContactModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (form: FormData) => void }) { return <Modal title="Ajouter un contact" detail="Le contact devient un prospect et rejoint le parcours." onClose={onClose}><form action={onSubmit} className="modal-form"><label>Nom complet<input name="name" required placeholder="Ex. Chloé Martin" /></label><label>Email<input name="email" type="email" required placeholder="chloe@exemple.fr" /></label><label>Téléphone<input name="phone" placeholder="06 00 00 00 00" /></label><label>Source<select name="source"><option>Site web</option><option>Google</option><option>Instagram</option><option>Parrainage</option><option>Saisie interne</option></select></label><button className="button" type="submit">Créer le prospect</button></form></Modal>; }
 function MobileMoreMenu({ views, activeView, onPick, onClose }: { views: { name: View; icon: string }[]; activeView: View; onPick: (view: View) => void; onClose: () => void }) { return <div className="mobile-more-backdrop" onClick={onClose}><section className="mobile-more" onClick={(event) => event.stopPropagation()}><header><div><b>Autres espaces</b><small>Outils de pilotage premium</small></div><button className="icon-button" onClick={onClose}>×</button></header><div>{views.map((view) => <button key={view.name} className={activeView === view.name ? "active" : ""} onClick={() => onPick(view.name)}><span>{view.icon}</span><b>{view.name}</b><i>→</i></button>)}</div></section></div>; }
-function ChatModal({ onClose, onCreate }: { onClose: () => void; onCreate: () => void }) { return <div className="chat-backdrop"><aside className="chat"><header><div><b>◌ Assistant CRM</b><small>● En ligne</small></div><button className="icon-button" onClick={onClose}>×</button></header><div className="chat-messages"><p>Bonjour Camille. Je peux préparer les relances et créer les tâches prioritaires.</p><p className="mine">Quelles sont les priorités ?</p><p>Trois RDV ont besoin d’une confirmation. Clara attend la validation de son programme.</p></div><footer><button className="button outline" onClick={onCreate}>Créer un événement de suivi</button></footer></aside></div>; }
+type ChatChannel = "WhatsApp" | "Email" | "Instagram";
+type ChatMessage = { id: string; sender: "member" | "coach" | "agent"; text: string; time: string };
+type ChatThread = { id: string; name: string; initials: string; channel: ChatChannel; status: string; lastMessage: string; time: string; unread: number; stage: Stage; messages: ChatMessage[] };
+
+const initialChatThreads: ChatThread[] = [
+  { id: "lea", name: "Léa Dubois", initials: "LD", channel: "WhatsApp", status: "En ligne", lastMessage: "Peut-on décaler le RDV à jeudi ?", time: "Il y a 4 min", unread: 2, stage: "RDV", messages: [{ id: "lea-1", sender: "member", text: "Bonjour, peut-on décaler le RDV à jeudi ?", time: "09:42" }, { id: "lea-2", sender: "agent", text: "Je vérifie les disponibilités de l’équipe. Je vous propose un créneau dans un instant.", time: "09:43" }] },
+  { id: "thomas", name: "Thomas Bernard", initials: "TB", channel: "Email", status: "Actif il y a 18 min", lastMessage: "Quel abonnement choisir pour une reprise ?", time: "Il y a 18 min", unread: 1, stage: "Essai", messages: [{ id: "thomas-1", sender: "member", text: "Quel abonnement choisir pour une reprise sportive ?", time: "09:25" }, { id: "thomas-2", sender: "coach", text: "Je peux vous orienter vers l’offre Starter et prévoir une séance d’essai.", time: "09:28" }] },
+  { id: "julien", name: "Julien Moreau", initials: "JM", channel: "Instagram", status: "Actif il y a 32 min", lastMessage: "Je souhaite faire une séance d’essai.", time: "Il y a 32 min", unread: 0, stage: "Prospect", messages: [{ id: "julien-1", sender: "member", text: "Je souhaite faire une séance d’essai.", time: "09:11" }, { id: "julien-2", sender: "agent", text: "Avec plaisir ! Je peux vous proposer une première séance cette semaine.", time: "09:12" }] },
+  { id: "clara", name: "Clara Petit", initials: "CP", channel: "WhatsApp", status: "Actif hier", lastMessage: "Mon programme est-il prêt ?", time: "Hier", unread: 0, stage: "Inscrit", messages: [{ id: "clara-1", sender: "member", text: "Mon programme personnalisé est-il prêt ?", time: "Hier" }, { id: "clara-2", sender: "coach", text: "Il est en validation coach. Je vous préviens dès qu’il est disponible.", time: "Hier" }] },
+  { id: "sophie", name: "Sophie Renaud", initials: "SR", channel: "Email", status: "Actif il y a 2 h", lastMessage: "Je confirme ma visite du studio.", time: "Il y a 2 h", unread: 0, stage: "RDV", messages: [{ id: "sophie-1", sender: "member", text: "Je confirme ma visite du studio.", time: "07:50" }, { id: "sophie-2", sender: "agent", text: "Parfait, votre visite est bien enregistrée dans l’agenda.", time: "07:51" }] },
+];
+
+function ChatModal({ onClose, onCreate }: { onClose: () => void; onCreate: () => void }) {
+  const [threads, setThreads] = useState(initialChatThreads);
+  const [selectedId, setSelectedId] = useState("lea");
+  const [query, setQuery] = useState("");
+  const [draft, setDraft] = useState("");
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [newChatName, setNewChatName] = useState("");
+  const [newChatChannel, setNewChatChannel] = useState<ChatChannel>("WhatsApp");
+  const [mobileDetail, setMobileDetail] = useState(false);
+  const selected = threads.find((thread) => thread.id === selectedId) ?? threads[0];
+  const filteredThreads = threads.filter((thread) => `${thread.name} ${thread.lastMessage} ${thread.channel}`.toLowerCase().includes(query.toLowerCase()));
+
+  const selectThread = (thread: ChatThread) => {
+    setSelectedId(thread.id);
+    setMobileDetail(true);
+    setThreads((current) => current.map((item) => item.id === thread.id ? { ...item, unread: 0 } : item));
+  };
+  const sendMessage = () => {
+    const text = draft.trim();
+    if (!text || !selected) return;
+    const reply = text.toLowerCase().includes("rdv") || text.toLowerCase().includes("rendez")
+      ? "Je regarde les créneaux disponibles et je vous propose la meilleure option."
+      : "Bien reçu. Je l’ajoute au suivi CRM et je prépare la prochaine action pour l’équipe.";
+    setThreads((current) => current.map((thread) => thread.id === selected.id ? { ...thread, lastMessage: text, time: "À l’instant", messages: [...thread.messages, { id: crypto.randomUUID(), sender: "coach", text, time: "À l’instant" }, { id: crypto.randomUUID(), sender: "agent", text: reply, time: "À l’instant" }] } : thread));
+    setDraft("");
+  };
+  const startNewChat = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = newChatName.trim();
+    if (!name) return;
+    const initialsValue = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+    const id = crypto.randomUUID();
+    const thread: ChatThread = { id, name, initials: initialsValue, channel: newChatChannel, status: "Nouveau contact", lastMessage: "Conversation créée", time: "À l’instant", unread: 0, stage: "Prospect", messages: [{ id: crypto.randomUUID(), sender: "agent", text: `Bonjour ${name}, comment puis-je vous aider dans votre parcours sportif ?`, time: "À l’instant" }] };
+    setThreads((current) => [thread, ...current]);
+    setSelectedId(id);
+    setNewChatName("");
+    setNewChatOpen(false);
+    setMobileDetail(true);
+  };
+
+  return <div className="crm-chat-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={`crm-chat ${mobileDetail ? "mobile-detail" : ""}`} role="dialog" aria-modal="true" aria-label="Assistant CRM">
+    <aside className="crm-chat-list">
+      <div className="crm-chat-list-head"><div><span className="eyebrow">FITFLOW CRM</span><h2>Messages</h2><p>{threads.length} conversations · {threads.filter((thread) => thread.unread > 0).length} non lues</p></div><div className="crm-chat-head-actions"><button className="icon-button" aria-label="Nouvelle conversation" onClick={() => setNewChatOpen(true)}>＋</button><button className="icon-button" aria-label="Fermer l’assistant" onClick={onClose}>×</button></div></div>
+      <label className="crm-chat-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher une conversation" aria-label="Rechercher une conversation" /></label>
+      <div className="crm-chat-threads">{filteredThreads.map((thread) => <button key={thread.id} className={`crm-chat-thread ${thread.id === selectedId ? "active" : ""}`} onClick={() => selectThread(thread)}><span className={`crm-chat-avatar ${thread.channel.toLowerCase()}`}>{thread.initials}</span><span className="crm-chat-thread-copy"><span><b>{thread.name}</b><time>{thread.time}</time></span><small><i className={`crm-channel-dot ${thread.channel.toLowerCase()}`} />{thread.lastMessage}</small></span>{thread.unread > 0 && <em>{thread.unread}</em>}</button>)}{filteredThreads.length === 0 && <p className="crm-chat-empty">Aucune conversation trouvée.</p>}</div>
+      {newChatOpen && <div className="crm-chat-new-layer"><form onSubmit={startNewChat}><div className="crm-chat-new-head"><div><span className="eyebrow">NOUVELLE CONVERSATION</span><h3>Démarrer un échange</h3></div><button type="button" className="icon-button" onClick={() => setNewChatOpen(false)}>×</button></div><label>Nom du contact<input autoFocus value={newChatName} onChange={(event) => setNewChatName(event.target.value)} placeholder="Ex. Camille Martin" required /></label><label>Canal<select value={newChatChannel} onChange={(event) => setNewChatChannel(event.target.value as ChatChannel)}><option>WhatsApp</option><option>Email</option><option>Instagram</option></select></label><button className="button" type="submit">Créer la conversation</button></form></div>}
+    </aside>
+    <section className="crm-chat-main">
+      <header className="crm-chat-main-head"><div className="crm-chat-main-person"><button className="crm-chat-back icon-button" aria-label="Retour aux conversations" onClick={() => setMobileDetail(false)}>←</button><span className={`crm-chat-avatar ${selected.channel.toLowerCase()}`}>{selected.initials}</span><div><h2>{selected.name}</h2><p><i className="online-dot" />{selected.status} · {selected.channel}</p></div></div><div className="crm-chat-head-actions"><button className="button outline small" onClick={onCreate}>＋ Événement</button><button className="icon-button" aria-label="Fermer l’assistant" onClick={onClose}>×</button></div></header>
+      <div className="crm-chat-context"><span className={`tag ${stageClass(selected.stage)}`}>{selected.stage}</span><span>Score IA 86</span><button onClick={() => onCreate()}>Voir la fiche contact →</button></div>
+      <div className="crm-chat-messages">{selected.messages.map((message) => <article key={message.id} className={`crm-chat-message ${message.sender === "coach" ? "mine" : ""}`}><div className="crm-chat-bubble">{message.sender === "agent" && <span className="crm-chat-agent-label">✦ Agent FitFlow</span>}<p>{message.text}</p><time>{message.time}</time></div></article>)}</div>
+      <div className="crm-chat-suggestions"><button onClick={() => setDraft("Je veux confirmer mon prochain rendez-vous")}>Confirmer le RDV</button><button onClick={() => setDraft("Peux-tu me préparer un programme adapté ?")}>Préparer un programme</button><button onClick={() => setDraft("Je souhaite connaître les tarifs")}>Répondre aux tarifs</button></div>
+      <form className="crm-chat-composer" onSubmit={(event) => { event.preventDefault(); sendMessage(); }}><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); sendMessage(); } }} placeholder="Écrire un message… (⌘/Ctrl + Entrée pour envoyer)" aria-label="Écrire un message" rows={1} /><div><button type="button" className="icon-button" aria-label="Ajouter une pièce jointe" onClick={() => setDraft((value) => value ? `${value} 📎` : "📎 ")}>⌕</button><button type="submit" className="button" disabled={!draft.trim()}>Envoyer ↗</button></div></form>
+    </section>
+  </section></div>;
+}
 function Modal({ title, detail, onClose, children }: { title: string; detail: string; onClose: () => void; children: React.ReactNode }) { return <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-label={title}><header><div><h2>{title}</h2><p>{detail}</p></div><button className="icon-button" onClick={onClose}>×</button></header>{children}</section></div>; }
