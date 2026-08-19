@@ -9,8 +9,10 @@ type Contact = { id: string; name: string; email: string; phone: string; source:
 type EventItem = { id: string; date: string; label: string; contact: string; detail: string };
 type Automation = { id: string; service: "Airtable" | "Brevo" | "WhatsApp" | "Make"; name: string; status: "Actif" | "En pause"; lastRun: string };
 type Program = { id: string; client: string; goal: string; frequency: string; status: "À valider" | "Validé"; createdAt: string };
+type Exercise = { id: string; name: string; muscle: string; equipment: string; level: "Débutant" | "Intermédiaire" | "Avancé"; prescription: string; cue: string };
+type WorkoutSession = { id: string; client: string; date: string; label: string; duration: string; completion: number; volume: string };
 type FinanceItem = { id: string; month: string; type: "CA" | "Charge"; category: string; amount: number };
-type Database = { contacts: Contact[]; events: EventItem[]; automations: Automation[]; programs: Program[]; finance: FinanceItem[] };
+type Database = { contacts: Contact[]; events: EventItem[]; automations: Automation[]; programs: Program[]; workouts: WorkoutSession[]; finance: FinanceItem[] };
 
 const STORAGE_KEY = "fitflow-crm-portfolio-v2";
 const views: { name: View; icon: string }[] = [
@@ -18,6 +20,16 @@ const views: { name: View; icon: string }[] = [
   { name: "Inbox", icon: "◉" }, { name: "Agenda", icon: "◷" }, { name: "Automatisations", icon: "ϟ" }, { name: "Campagnes", icon: "✉" }, { name: "Programmes", icon: "▤" }, { name: "Finance", icon: "▥" },
 ];
 const stages: Stage[] = ["Prospect", "RDV", "Essai", "Inscrit", "Résilié"];
+const exerciseLibrary: Exercise[] = [
+  { id: "ex-1", name: "Goblet squat", muscle: "Jambes", equipment: "Haltère", level: "Débutant", prescription: "3 × 10 reps", cue: "Genoux dans l’axe, tempo contrôlé" },
+  { id: "ex-2", name: "Développé couché", muscle: "Pectoraux", equipment: "Barre", level: "Intermédiaire", prescription: "4 × 8 reps", cue: "Omoplates serrées, trajectoire stable" },
+  { id: "ex-3", name: "Soulevé de terre roumain", muscle: "Ischio-jambiers", equipment: "Barre", level: "Intermédiaire", prescription: "3 × 10 reps", cue: "Hanches en arrière, dos neutre" },
+  { id: "ex-4", name: "Tirage vertical", muscle: "Dos", equipment: "Machine", level: "Débutant", prescription: "3 × 12 reps", cue: "Tirer les coudes vers les côtes" },
+  { id: "ex-5", name: "Fentes marchées", muscle: "Jambes", equipment: "Poids du corps", level: "Débutant", prescription: "3 × 12 / jambe", cue: "Pousser dans le pied avant" },
+  { id: "ex-6", name: "Développé épaules", muscle: "Épaules", equipment: "Haltères", level: "Intermédiaire", prescription: "3 × 10 reps", cue: "Garder les côtes rentrées" },
+  { id: "ex-7", name: "Planche active", muscle: "Core", equipment: "Poids du corps", level: "Débutant", prescription: "3 × 40 sec", cue: "Respirer sans creuser le bas du dos" },
+  { id: "ex-8", name: "Rowing unilatéral", muscle: "Dos", equipment: "Haltère", level: "Avancé", prescription: "4 × 8 / côté", cue: "Initier le mouvement avec le coude" },
+];
 const initialDatabase: Database = {
   contacts: [
     { id: "c1", name: "Léa Dubois", email: "lea@exemple.fr", phone: "06 10 24 83 11", source: "Site web", stage: "RDV", next: "Appel découverte", activity: "Il y a 2 h" },
@@ -40,6 +52,11 @@ const initialDatabase: Database = {
   programs: [
     { id: "p1", client: "Clara Petit", goal: "Prise de masse", frequency: "4 séances / semaine", status: "À valider", createdAt: "Aujourd’hui" },
     { id: "p2", client: "Thomas Bernard", goal: "Reprise sportive", frequency: "3 séances / semaine", status: "Validé", createdAt: "Hier" },
+  ],
+  workouts: [
+    { id: "w1", client: "Clara Petit", date: "Aujourd’hui", label: "Full body · Semaine 1", duration: "48 min", completion: 100, volume: "4 820 kg" },
+    { id: "w2", client: "Thomas Bernard", date: "Hier", label: "Reprise · Séance 2", duration: "36 min", completion: 75, volume: "2 140 kg" },
+    { id: "w3", client: "Clara Petit", date: "Lun. 10 août", label: "Bas du corps", duration: "52 min", completion: 100, volume: "5 180 kg" },
   ],
   finance: [
     { id: "f1", month: "2026-08", type: "CA", category: "Abonnements", amount: 18460 },
@@ -67,11 +84,19 @@ export function FitFlowWorkspace() {
   const [chatOpen, setChatOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [contactFilter, setContactFilter] = useState<Stage | "Tous">("Tous");
+  const [programTab, setProgramTab] = useState<"builder" | "library" | "progress">("builder");
+  const [exerciseQuery, setExerciseQuery] = useState("");
+  const [exerciseMuscle, setExerciseMuscle] = useState("Tous");
+  const [selectedExerciseIds, setSelectedExerciseIds] = useState<string[]>(["ex-1", "ex-4", "ex-7"]);
+  const [sessionClient, setSessionClient] = useState("Clara Petit");
   const [notice, setNotice] = useState("Données de démonstration locales");
 
   useMountEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved) setDatabase(JSON.parse(saved) as Database);
+    if (saved) {
+      const parsed = JSON.parse(saved) as Partial<Database>;
+      setDatabase({ ...initialDatabase, ...parsed, workouts: parsed.workouts ?? initialDatabase.workouts });
+    }
   });
 
   const commit = (next: Database, message: string) => {
@@ -132,11 +157,20 @@ export function FitFlowWorkspace() {
     const frequency = String(form.get("frequency"));
     if (!client || !goal || !frequency) return;
     const program: Program = { id: crypto.randomUUID(), client, goal, frequency, status: "À valider", createdAt: "À l’instant" };
-    commit({ ...database, programs: [program, ...database.programs], events: [{ id: crypto.randomUUID(), date: "À l’instant", label: "Programme généré", contact: client, detail: `${goal} · ${frequency}` }, ...database.events] }, `Programme brouillon créé pour ${client}`);
+    commit({ ...database, programs: [program, ...database.programs], events: [{ id: crypto.randomUUID(), date: "À l’instant", label: "Programme généré", contact: client, detail: `${goal} · ${frequency} · ${selectedExerciseIds.length} exercices sélectionnés` }, ...database.events] }, `Programme brouillon créé pour ${client}`);
   };
 
   const validateProgram = (program: Program) => {
     commit({ ...database, programs: database.programs.map((item) => item.id === program.id ? { ...item, status: "Validé" } : item), events: [{ id: crypto.randomUUID(), date: "À l’instant", label: "Programme validé", contact: program.client, detail: "Email Brevo prêt à être envoyé" }, ...database.events] }, `Programme validé pour ${program.client}`);
+  };
+
+  const toggleExercise = (exerciseId: string) => {
+    setSelectedExerciseIds((current) => current.includes(exerciseId) ? current.filter((id) => id !== exerciseId) : [...current, exerciseId]);
+  };
+
+  const logWorkout = () => {
+    const session: WorkoutSession = { id: crypto.randomUUID(), client: sessionClient, date: "À l’instant", label: "Séance personnalisée", duration: `${38 + selectedExerciseIds.length * 4} min`, completion: 100, volume: `${(selectedExerciseIds.length * 720).toLocaleString("fr-FR")} kg` };
+    commit({ ...database, workouts: [session, ...database.workouts], events: [{ id: crypto.randomUUID(), date: "À l’instant", label: "Séance enregistrée", contact: sessionClient, detail: `${selectedExerciseIds.length} exercices · ${session.duration} · ${session.volume}` }, ...database.events] }, `Séance enregistrée pour ${sessionClient}`);
   };
 
   const createFinance = (form: FormData) => {
@@ -187,11 +221,25 @@ export function FitFlowWorkspace() {
     <section className="grid-2"><Panel title="Mémoire agent" detail="Les faits importants, jamais des suppositions"><Timeline events={database.events.slice(0, 5)} /></Panel><Panel title="Garde-fous" detail="Les actions sensibles demandent une validation humaine"><div className="safeguards"><p>✓ Résiliations et réclamations sont escaladées.</p><p>✓ Programmes sportifs passent par le coach.</p><p>✓ Les campagnes utilisent les consentements CRM.</p></div></Panel></section>
   </>;
 
-  const Programs = () => <>
-    <section className="welcome compact"><div><h1>Programmes personnalisés</h1><p>Un questionnaire produit un brouillon. Le coach valide ensuite le programme.</p></div><span className="local-state">{validatedPrograms} programme{validatedPrograms > 1 ? "s" : ""} validé{validatedPrograms > 1 ? "s" : ""}</span></section>
-    <section className="program-layout"><form className="panel form-panel" action={createProgram}><div className="panel-head"><div><h2>Questionnaire client</h2><p>Créer un programme structuré.</p></div></div><label>Client<select name="client" required><option value="">Choisir un client</option>{database.contacts.filter((contact) => contact.stage === "Inscrit" || contact.stage === "Essai").map((contact) => <option key={contact.id}>{contact.name}</option>)}</select></label><label>Objectif<select name="goal" required><option value="">Choisir un objectif</option><option>Prise de masse</option><option>Perte de poids</option><option>Reprise sportive</option><option>Préparation événement</option></select></label><label>Fréquence<select name="frequency" required><option value="">Choisir la fréquence</option><option>2 séances / semaine</option><option>3 séances / semaine</option><option>4 séances / semaine</option></select></label><div className="notice"><b>Étape suivante</b><span>Le coach vérifie le brouillon avant son envoi.</span></div><button className="button" type="submit">Générer le brouillon</button></form><section className="program-list">{database.programs.map((program) => <article className="program-card" key={program.id}><div><span className="tag neutral">{program.status}</span><h2>{program.client}</h2><p>{program.goal} · {program.frequency}</p><small>Créé {program.createdAt}</small></div>{program.status === "À valider" ? <button className="button" onClick={() => validateProgram(program)}>Valider et préparer l’email</button> : <span className="sent">✓ Prêt à envoyer</span>}</article>)}</section></section>
-    <section className="client-portal"><div><span>ESPACE CLIENT</span><h2>Suivi autonome et feedback</h2><p>Chaque programme validé ouvre un espace privé : séances, objectifs, documents et ressenti.</p></div><div className="portal-actions"><b>Clara Petit · 3 / 4 séances</b><button className="button outline" onClick={() => setNotice("Lien d’espace client préparé pour Clara")}>Ouvrir l’espace client</button></div></section>
-  </>;
+  const Programs = () => {
+    const filteredExercises = exerciseLibrary.filter((exercise) => (exerciseMuscle === "Tous" || exercise.muscle === exerciseMuscle) && `${exercise.name} ${exercise.muscle} ${exercise.equipment}`.toLowerCase().includes(exerciseQuery.toLowerCase()));
+    const selectedExercises = exerciseLibrary.filter((exercise) => selectedExerciseIds.includes(exercise.id));
+    const clientWorkouts = database.workouts.filter((workout) => workout.client === sessionClient);
+    const averageCompletion = clientWorkouts.length ? Math.round(clientWorkouts.reduce((sum, workout) => sum + workout.completion, 0) / clientWorkouts.length) : 0;
+    const muscles = ["Tous", ...Array.from(new Set(exerciseLibrary.map((exercise) => exercise.muscle)))];
+    return <>
+      <section className="crm-page-head"><div><h1>Programmes & suivi</h1><p>Créez des plans sportifs, suivez chaque séance et gardez le coach dans la boucle.</p></div><div><span className="local-state">{validatedPrograms} validé{validatedPrograms > 1 ? "s" : ""}</span></div></section>
+      <section className="program-summary"><article><span>Bibliothèque active</span><strong>1 324</strong><small>exercices indexés</small></article><article><span>Séances cette semaine</span><strong>{database.workouts.length + 5}</strong><small>+18 % vs. semaine passée</small></article><article><span>Adhérence moyenne</span><strong>86 %</strong><small>sur les membres suivis</small></article><article className="program-summary-accent"><span>Programmes validés</span><strong>{validatedPrograms}</strong><small>prêts à envoyer par Brevo</small></article></section>
+      <nav className="program-tabs" aria-label="Espaces programmes"><button className={programTab === "builder" ? "active" : ""} onClick={() => setProgramTab("builder")}>✦ Créateur</button><button className={programTab === "library" ? "active" : ""} onClick={() => setProgramTab("library")}>▦ Bibliothèque</button><button className={programTab === "progress" ? "active" : ""} onClick={() => setProgramTab("progress")}>↗ Progression</button></nav>
+      {programTab === "builder" && <>
+        <section className="program-builder-grid"><form className="panel program-questionnaire" action={createProgram}><div className="panel-head"><div><span className="eyebrow">ÉTAPE 01 · PROFIL</span><h2>Questionnaire client</h2><p>Le plan s’adapte à l’objectif et au niveau du membre.</p></div></div><label>Client<select name="client" required><option value="">Choisir un client</option>{database.contacts.filter((contact) => contact.stage === "Inscrit" || contact.stage === "Essai").map((contact) => <option key={contact.id}>{contact.name}</option>)}</select></label><label>Objectif<select name="goal" required><option value="">Choisir un objectif</option><option>Prise de masse</option><option>Perte de poids</option><option>Reprise sportive</option><option>Préparation événement</option></select></label><label>Fréquence<select name="frequency" required><option value="">Choisir la fréquence</option><option>2 séances / semaine</option><option>3 séances / semaine</option><option>4 séances / semaine</option></select></label><div className="program-selected"><div><b>Exercices sélectionnés</b><small>{selectedExercises.length} mouvements dans le brouillon</small></div><button type="button" className="text-button" onClick={() => setProgramTab("library")}>Modifier →</button><div className="program-selected-list">{selectedExercises.map((exercise) => <span key={exercise.id}>{exercise.name}<button type="button" aria-label={`Retirer ${exercise.name}`} onClick={() => toggleExercise(exercise.id)}>×</button></span>)}</div></div><div className="notice"><b>Validation coach requise</b><span>Une fois validé, le programme est prêt à être envoyé par email.</span></div><button className="button" type="submit">Générer le brouillon ↗</button></form><section className="program-live-preview"><div className="program-preview-top"><div><span className="eyebrow">APERÇU DU PROGRAMME</span><h2>{sessionClient}</h2><p>Reprise sportive · 3 séances / semaine</p></div><span className="program-preview-status">Brouillon</span></div><div className="program-week"><article><span>LUN</span><b>Haut du corps</b><small>{selectedExercises.slice(0, 2).map((exercise) => exercise.name).join(" · ") || "Choisir des exercices"}</small><em>45 min</em></article><article><span>MER</span><b>Full body</b><small>{selectedExercises.slice(1, 3).map((exercise) => exercise.name).join(" · ") || "Choisir des exercices"}</small><em>38 min</em></article><article><span>VEN</span><b>Conditionnement</b><small>{selectedExercises.slice(2, 4).map((exercise) => exercise.name).join(" · ") || "Choisir des exercices"}</small><em>32 min</em></article></div><div className="program-preview-footer"><span><b>{selectedExercises.length}</b> exercices</span><span><b>3</b> séances</span><span><b>115</b> min / semaine</span></div></section></section>
+        <section className="panel program-queue"><div className="panel-head"><div><h2>File de validation</h2><p>Les programmes générés restent modifiables avant transmission.</p></div><button className="button outline small" onClick={() => setProgramTab("progress")}>Voir les séances</button></div><div className="program-list">{database.programs.map((program) => <article className="program-card" key={program.id}><div><span className={`tag ${program.status === "Validé" ? "inscrit" : "neutral"}`}>{program.status}</span><h2>{program.client}</h2><p>{program.goal} · {program.frequency}</p><small>Créé {program.createdAt}</small></div>{program.status === "À valider" ? <button className="button" onClick={() => validateProgram(program)}>Valider et préparer l’email</button> : <span className="sent">✓ Prêt à envoyer</span>}</article>)}</div></section>
+      </>}
+      {programTab === "library" && <section className="panel exercise-library"><div className="panel-head exercise-library-head"><div><span className="eyebrow">CATALOGUE FITNESS</span><h2>Bibliothèque d’exercices</h2><p>Ajoutez des mouvements au brouillon de {sessionClient}.</p></div><span className="library-count">{filteredExercises.length} résultats</span></div><div className="exercise-filters"><label className="exercise-search">⌕<input value={exerciseQuery} onChange={(event) => setExerciseQuery(event.target.value)} placeholder="Rechercher un exercice" aria-label="Rechercher un exercice" /></label><select value={exerciseMuscle} onChange={(event) => setExerciseMuscle(event.target.value)} aria-label="Filtrer par groupe musculaire">{muscles.map((muscle) => <option key={muscle}>{muscle}</option>)}</select><button className="button outline" onClick={() => setProgramTab("builder")}>Retour au créateur</button></div><div className="exercise-grid">{filteredExercises.map((exercise) => { const selected = selectedExerciseIds.includes(exercise.id); return <article className={`exercise-card ${selected ? "selected" : ""}`} key={exercise.id}><div className="exercise-card-art"><span>{exercise.muscle.slice(0, 2).toUpperCase()}</span><b>{selected ? "Ajouté" : exercise.level}</b></div><div className="exercise-card-copy"><div><h3>{exercise.name}</h3><small>{exercise.equipment} · {exercise.muscle}</small></div><p>{exercise.cue}</p><footer><span>{exercise.prescription}</span><button className={selected ? "selected-action" : ""} onClick={() => toggleExercise(exercise.id)}>{selected ? "Retirer" : "Ajouter"} {selected ? "×" : "+"}</button></footer></div></article>; })}</div></section>}
+      {programTab === "progress" && <><section className="progress-layout"><section className="panel progress-overview"><div className="panel-head"><div><h2>Progression membre</h2><p>La régularité de {sessionClient} sur les quatre dernières semaines.</p></div><select value={sessionClient} onChange={(event) => setSessionClient(event.target.value)} aria-label="Choisir un membre">{database.contacts.filter((contact) => contact.stage === "Inscrit" || contact.stage === "Essai").map((contact) => <option key={contact.id}>{contact.name}</option>)}</select></div><div className="progress-score"><div><span>Adhérence</span><strong>{averageCompletion || 86}%</strong><small>objectif : 80 %</small></div><div className="progress-ring"><i style={{ "--progress": `${averageCompletion || 86}%` } as React.CSSProperties} /></div><div><span>Volume total</span><strong>12 140 kg</strong><small>+8,4 % ce mois</small></div></div><div className="progress-chart"><div className="progress-chart-grid"><i style={{ height: "48%" }} /><i style={{ height: "62%" }} /><i style={{ height: "54%" }} /><i style={{ height: "76%" }} /><i style={{ height: "84%" }} /><i style={{ height: "92%" }} /></div><div className="progress-chart-labels"><span>21 juil.</span><span>28 juil.</span><span>4 août</span><span>11 août</span><span>17 août</span><span>Aujourd’hui</span></div></div></section><section className="panel workout-recorder"><div className="panel-head"><div><span className="eyebrow">SESSION RAPIDE</span><h2>Enregistrer une séance</h2><p>Le suivi met à jour la fiche contact.</p></div></div><label>Membre<select value={sessionClient} onChange={(event) => setSessionClient(event.target.value)}>{database.contacts.filter((contact) => contact.stage === "Inscrit" || contact.stage === "Essai").map((contact) => <option key={contact.id}>{contact.name}</option>)}</select></label><div className="recorder-stats"><span><b>{selectedExerciseIds.length}</b> exercices prêts</span><span><b>38 min</b> durée estimée</span></div><button className="button" onClick={logWorkout}>✓ Marquer la séance terminée</button></section></section><section className="panel workout-history"><div className="panel-head"><div><h2>Historique des séances</h2><p>Les dernières séances synchronisées dans Airtable.</p></div><span className="tag inscrit">Synchronisé</span></div><div className="workout-history-list">{database.workouts.map((workout) => <article key={workout.id}><span className="workout-history-icon">↗</span><div><b>{workout.label}</b><small>{workout.client} · {workout.date}</small></div><span><b>{workout.duration}</b><small>{workout.volume}</small></span><strong>{workout.completion}%</strong></article>)}</div></section></>}
+      <section className="client-portal"><div><span>ESPACE CLIENT</span><h2>Programme, séances et feedback réunis</h2><p>Chaque membre retrouve ses exercices, ses objectifs et ses documents depuis un lien privé.</p></div><div className="portal-actions"><b>{sessionClient} · {averageCompletion || 86}% d’adhérence</b><button className="button outline" onClick={() => setNotice(`Lien d’espace client préparé pour ${sessionClient}`)}>Ouvrir l’espace client</button></div></section>
+    </>;
+  };
 
   const Finance = () => <>
     <section className="welcome compact"><div><h1>Finance</h1><p>Le pilotage mensuel regroupe le chiffre d’affaires, les charges et le bénéfice brut.</p></div><span className="local-state">Août 2026</span></section>
