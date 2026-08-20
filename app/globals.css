@@ -100,3 +100,26 @@ body { background:#fff; color:#09090b; font-family:Inter,ui-sans-serif,system-ui
 
 .program-questionnaire>label { display:grid; gap:8px; margin:0 16px; color:#2b3932; font-size:11px; font-weight:750; letter-spacing:.01em; }.program-questionnaire>label select { width:100%; min-height:42px; appearance:none; border:1px solid #d8e4dc; border-radius:9px; background:#fbfdfc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23146c4c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center; background-size:14px; padding:0 38px 0 12px; color:#26342c; font-size:12px; font-weight:600; box-shadow:0 1px 2px rgb(16 24 21 / .03),inset 0 0 0 1px rgb(255 255 255 / .6); transition:border-color .18s,box-shadow .18s,background-color .18s; }.program-questionnaire>label select:hover { border-color:#a7cdb5; background-color:#f5fbf7; }.program-questionnaire>label select:focus { border-color:#4b9d70; background-color:#fff; box-shadow:0 0 0 3px rgb(75 157 112 / .14); outline:0; }.program-questionnaire>label select:invalid { color:#8c9891; font-weight:500; }.program-questionnaire>label select option { color:#26342c; background:#fff; font-weight:500; }.program-questionnaire>label select option:first-child { color:#8c9891; }.program-questionnaire .notice { border-color:#d8e4dc; border-radius:9px; background:linear-gradient(180deg,#f7fbf8,#f1f8f3); padding:13px; }.program-questionnaire .notice b { color:#22372b; font-size:11px; }.program-questionnaire .notice span { color:#718178; line-height:1.45; }.program-questionnaire>.button { min-height:42px; border-radius:9px; box-shadow:0 5px 12px rgb(16 24 21 / .12); font-size:12px; }.program-questionnaire>.button:hover { box-shadow:0 8px 16px rgb(16 24 21 / .18); transform:translateY(-1px); }
 @media (max-width:600px) { .program-questionnaire>label { margin:0 14px; }.program-questionnaire>label select { min-height:40px; }.program-questionnaire .notice { margin:0 14px; }.program-questionnaire>.button { margin:0 14px; } }
+
+/* Motion layer: feedback and spatial consistency, kept short and pointer-gated. */
+:root { --ease-out:cubic-bezier(0.23,1,0.32,1); --ease-in-out:cubic-bezier(0.77,0,0.175,1); }
+.content > * { animation:dashboardIn .42s var(--ease-out) both; }.content > :nth-child(2) { animation-delay:.04s; }.content > :nth-child(3) { animation-delay:.08s; }.content > :nth-child(4) { animation-delay:.12s; }
+.program-summary article,.program-tabs button,.program-week article,.exercise-card,.program-visual-metric { transition:transform .18s var(--ease-out),box-shadow .18s var(--ease-out),border-color .18s ease,background-color .18s ease; }
+.exercise-card-art img { transition:transform .24s var(--ease-out),opacity .24s ease; }
+.program-visual-squat { transition:transform .3s var(--ease-out),filter .3s ease; }
+@media (hover:hover) and (pointer:fine) {
+  .program-summary article:hover { transform:translateY(-3px); border-color:#afd2bd; box-shadow:0 12px 24px rgb(25 70 52 / .09); }
+  .program-tabs button:hover { transform:translateY(-1px); }
+  .program-week article:hover { transform:translateX(4px); border-color:rgb(169 241 193 / .32); background:rgb(255 255 255 / .09); }
+  .exercise-card:hover { transform:translateY(-4px); border-color:#9ac8ac; box-shadow:0 15px 26px rgb(25 70 52 / .12); }
+  .exercise-card:hover .exercise-card-art img { transform:scale(1.045); opacity:.98; }
+  .program-visual-hero:hover .program-visual-squat { transform:translateY(-5px) rotate(-1deg); filter:drop-shadow(0 21px 24px rgb(0 0 0 / .38)); }
+  .program-visual-hero:hover .program-visual-metric { transform:translateY(-3px); box-shadow:0 10px 22px rgb(0 0 0 / .18); }
+}
+@media (prefers-reduced-motion:reduce) {
+  html { scroll-behavior:auto; }
+  .content > * { animation:dashboardFade .2s ease both; }
+  .fitness-hero img,.pulse-node,.agent-orb { animation:none !important; }
+  .program-summary article,.program-tabs button,.program-week article,.exercise-card,.program-visual-metric,.exercise-card-art img,.program-visual-squat { transition:color .15s ease,background-color .15s ease,border-color .15s ease,box-shadow .15s ease; }
+}
+@keyframes dashboardFade { from { opacity:0; } to { opacity:1; } }
