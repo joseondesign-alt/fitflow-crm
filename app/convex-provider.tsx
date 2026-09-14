@@ -2,6 +2,7 @@
 
 import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex/react";
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { api } from "../convex/_generated/api";
 
 type ConvexSyncContextValue = {
   connected: boolean;
@@ -18,8 +19,6 @@ const fallback: ConvexSyncContextValue = {
 };
 
 const ConvexSyncContext = createContext<ConvexSyncContextValue>(fallback);
-const getSnapshotRef = "crm:getSnapshot" as any;
-const replaceSnapshotRef = "crm:replaceSnapshot" as any;
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : null;
 
@@ -29,8 +28,8 @@ function parseSnapshot(remote: unknown) {
 }
 
 function ConnectedConvex({ children }: { children: ReactNode }) {
-  const remote = useQuery(getSnapshotRef, {});
-  const replace = useMutation(replaceSnapshotRef);
+  const remote = useQuery(api.crm.getSnapshot);
+  const replace = useMutation(api.crm.replaceSnapshot);
   const saveSnapshot = useCallback(async (database: unknown) => {
     await replace({ payload: JSON.stringify(database) });
   }, [replace]);
