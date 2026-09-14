@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { useConvexSync } from "./convex-provider";
 
 type Stage = "Prospect" | "RDV" | "Essai" | "Inscrit" | "Résilié";
 type View = "Vue d’ensemble" | "Contacts" | "Parcours" | "Agent IA" | "Inbox" | "Agenda" | "Automatisations" | "Campagnes" | "Programmes" | "Finance";
@@ -77,6 +78,7 @@ function serviceLogo(service: Automation["service"]) { return `/integrations/${s
 function stageClass(stage: Stage) { return stage.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 
 export function FitFlowWorkspace() {
+  const convex = useConvexSync();
   const [database, setDatabase] = useState<Database>(initialDatabase);
   const [activeView, setActiveView] = useState<View>("Vue d’ensemble");
   const [eventOpen, setEventOpen] = useState(false);
@@ -99,9 +101,18 @@ export function FitFlowWorkspace() {
     }
   });
 
+  useEffect(() => {
+    if (!convex.snapshot || typeof convex.snapshot !== "object") return;
+    const remote = convex.snapshot as Partial<Database>;
+    if (!Array.isArray(remote.contacts) || !Array.isArray(remote.events)) return;
+    setDatabase({ ...initialDatabase, ...remote, workouts: remote.workouts ?? initialDatabase.workouts });
+    setNotice("Données synchronisées avec Convex");
+  }, [convex.snapshot]);
+
   const commit = (next: Database, message: string) => {
     setDatabase(next);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    if (convex.connected) void convex.saveSnapshot(next).catch(() => setNotice("Convex indisponible · sauvegarde locale conservée"));
     setNotice(message);
   };
   const contactsByStage = (stage: Stage) => database.contacts.filter((contact) => contact.stage === stage);
@@ -276,7 +287,7 @@ export function FitFlowWorkspace() {
   if (activeView === "Finance") content = <Finance />;
 
   const pickMobileView = (view: View) => { setActiveView(view); setMobileMoreOpen(false); };
-  return <div className="shell"><aside className="sidebar"><div className="brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={44} height={44} priority /><div><b>FitFlow CRM</b><small>Command center</small></div></div><nav>{views.map((view) => <button key={view.name} className={activeView === view.name ? "nav active" : "nav"} onClick={() => setActiveView(view.name)}><span>{view.icon}</span>{view.name}</button>)}</nav><div className="side-actions"><button className="nav" onClick={() => setChatOpen(true)}><span>◌</span>Assistant CRM</button><button className="nav" onClick={resetDemo}><span>↺</span>Réinitialiser l’espace</button></div></aside><main><header className="topbar"><div className="mobile-brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={32} height={32} priority /><b>FitFlow CRM</b></div><div className="top-actions"><button className="button outline" onClick={() => setChatOpen(true)}>◌ Assistant</button><button className="button" onClick={() => setEventOpen(true)}>＋ Nouvel événement</button></div></header><div className="content">{content}</div><nav className="mobile-nav">{views.slice(0, 4).map((view) => <button key={view.name} className={activeView === view.name ? "active" : ""} onClick={() => pickMobileView(view.name)}><span>{view.icon}</span>{view.name.replace("Vue d’ensemble", "Accueil")}</button>)}<button className={mobileMoreOpen ? "active" : ""} onClick={() => setMobileMoreOpen(true)}><span>☰</span>Plus</button></nav></main>{mobileMoreOpen && <MobileMoreMenu views={views.slice(4)} activeView={activeView} onPick={pickMobileView} onClose={() => setMobileMoreOpen(false)} />}{eventOpen && <EventModal contacts={database.contacts} onClose={() => setEventOpen(false)} onSubmit={createEvent} />}{contactOpen && <ContactModal onClose={() => setContactOpen(false)} onSubmit={createContact} />}{chatOpen && <ChatModal onClose={() => setChatOpen(false)} onCreate={() => { setEventOpen(true); setChatOpen(false); }} />}</div>;
+  return <div className="shell"><aside className="sidebar"><div className="brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={44} height={44} priority /><div><b>FitFlow CRM</b><small>Command center</small></div></div><nav>{views.map((view) => <button key={view.name} className={activeView === view.name ? "nav active" : "nav"} onClick={() => setActiveView(view.name)}><span>{view.icon}</span>{view.name}</button>)}</nav><div className="side-actions"><button className="nav" onClick={() => setChatOpen(true)}><span>◌</span>Assistant CRM</button><button className="nav" onClick={resetDemo}><span>↺</span>Réinitialiser l’espace</button></div></aside><main><header className="topbar"><div className="mobile-brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={32} height={32} priority /><b>FitFlow CRM</b></div><div className="top-actions"><span className={`sync-pill ${convex.connected ? "connected" : "local"}`} title={convex.connected ? "Synchronisation temps réel active" : "Ajoutez NEXT_PUBLIC_CONVEX_URL pour activer la base Convex"}><i />{convex.connected ? (convex.syncing ? "Connexion Convex…" : "Convex synchronisé") : "Mode démo local"}</span><button className="button outline" onClick={() => setChatOpen(true)}>◌ Assistant</button><button className="button" onClick={() => setEventOpen(true)}>＋ Nouvel événement</button></div></header><div className="content">{content}</div><nav className="mobile-nav">{views.slice(0, 4).map((view) => <button key={view.name} className={activeView === view.name ? "active" : ""} onClick={() => pickMobileView(view.name)}><span>{view.icon}</span>{view.name.replace("Vue d’ensemble", "Accueil")}</button>)}<button className={mobileMoreOpen ? "active" : ""} onClick={() => setMobileMoreOpen(true)}><span>☰</span>Plus</button></nav></main>{mobileMoreOpen && <MobileMoreMenu views={views.slice(4)} activeView={activeView} onPick={pickMobileView} onClose={() => setMobileMoreOpen(false)} />}{eventOpen && <EventModal contacts={database.contacts} onClose={() => setEventOpen(false)} onSubmit={createEvent} />}{contactOpen && <ContactModal onClose={() => setContactOpen(false)} onSubmit={createContact} />}{chatOpen && <ChatModal onClose={() => setChatOpen(false)} onCreate={() => { setEventOpen(true); setChatOpen(false); }} />}</div>;
 }
 
 function Metric({ label, value, change }: { label: string; value: string; change: string }) { return <article className="metric"><small>{label}</small><strong>{value}</strong><span>↗ {change}</span></article>; }
