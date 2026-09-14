@@ -43,6 +43,10 @@ button { transition:transform .22s cubic-bezier(.22,1,.36,1),background .22s,bor
 button:active { transform:scale(.98); }
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:3px solid rgb(0 107 79 / .20); outline-offset:2px; }
 .shell { max-width:1680px; gap:16px; padding:16px; }
+.thread.active { border-left:3px solid var(--green); background:var(--green-soft); padding-left:13px; }
+.unread-count { display:grid; place-items:center; width:18px; height:18px; border-radius:999px; background:var(--green); color:#fff; font-size:10px; font-style:normal; font-weight:800; }
+.conversation-body p small { display:block; margin-top:5px; color:var(--muted); font-size:9px; }
+.conversation-body .reply small { color:rgb(255 255 255 / .72); }
 .sidebar { min-height:calc(100dvh - 32px); overflow:hidden; border:1px solid rgb(216 228 222 / .9); border-radius:20px; background:rgb(255 255 255 / .78); box-shadow:inset 0 1px 0 #fff,0 12px 34px rgb(28 73 55 / .06); backdrop-filter:blur(18px); }
 .brand { min-height:82px; padding:0 18px; background:linear-gradient(140deg,#fff,#f1f8f4); }.brand b,.topbar b { font-weight:800; letter-spacing:-.04em; }.sidebar nav { padding:16px 10px; }.nav { min-height:40px; border-radius:11px; padding:10px 12px; font-weight:650; }.nav.active { background:linear-gradient(135deg,var(--green),var(--green-deep)); box-shadow:0 9px 18px rgb(0 107 79 / .18); }.nav:not(.active):hover { transform:translateX(3px); background:#edf6f1; }.side-actions { background:linear-gradient(180deg,transparent,#f7fbf9); }
 .topbar { min-height:68px; margin:0 4px; border:1px solid rgb(216 228 222 / .85); border-radius:17px; background:rgb(255 255 255 / .72); box-shadow:inset 0 1px 0 #fff,0 12px 28px rgb(28 73 55 / .05); backdrop-filter:blur(18px); }.content { width:min(1450px,100%); padding:38px 34px 56px; gap:28px; }.welcome h1 { max-width:780px; font-size:clamp(30px,3vw,47px); font-weight:800; letter-spacing:-.065em; text-wrap:balance; }.welcome p { max-width:67ch; color:#60746b; font-size:14px; line-height:1.6; }.local-state { padding:7px 9px; border-radius:8px; background:#edf7f1; color:var(--green-deep); }

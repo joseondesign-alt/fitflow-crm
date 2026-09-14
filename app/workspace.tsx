@@ -95,6 +95,7 @@ export function FitFlowWorkspace() {
   const [eventOpen, setEventOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [inboxThreadId, setInboxThreadId] = useState("lea");
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [contactFilter, setContactFilter] = useState<Stage | "Tous">("Tous");
   const [programTab, setProgramTab] = useState<"builder" | "library" | "progress">("builder");
@@ -286,7 +287,24 @@ export function FitFlowWorkspace() {
 
   const Inbox = () => <>
     <section className="welcome compact"><div><h1>Inbox omnicanale</h1><p>Emails, WhatsApp et Instagram réunis au même endroit, avec le contexte CRM de chaque conversation.</p></div><button className="button" onClick={() => setNotice("Réponse commerciale préparée par l’agent")}>✦ Préparer une réponse</button></section>
-    <section className="inbox-layout"><section className="panel inbox-list"><div className="panel-head"><div><h2>Conversations actives</h2><p>3 demandes nécessitent une action.</p></div></div>{[["WhatsApp","Léa Dubois","Peut-on décaler le RDV à jeudi ?","Il y a 4 min"],["Email","Thomas Bernard","Quel abonnement choisir pour une reprise ?","Il y a 18 min"],["Instagram","Julien Moreau","Je souhaite faire une séance d’essai.","Il y a 32 min"]].map(([channel,name,message,time]) => <button className="thread" key={name} onClick={() => setNotice(`Conversation ${channel} ouverte pour ${name}`)}><span className={`channel ${channel.toLowerCase()}`}>{channel === "WhatsApp" ? "◉" : channel === "Email" ? "✉" : "◎"}</span><span><b>{name}</b><small>{message}</small></span><em>{time}</em></button>)}</section><section className="panel conversation"><div className="panel-head"><div><h2>Léa Dubois <span className="tag inscrit">Score 86</span></h2><p>RDV · Source site web · Consentement WhatsApp</p></div></div><div className="conversation-body"><p>Bonjour, peut-on décaler le RDV à jeudi ?</p><p className="reply">Bonjour Léa, jeudi à 18 h est disponible. Je vous le réserve ?</p><div className="suggestions"><button onClick={() => setNotice("Réponse WhatsApp envoyée à Léa")}>Envoyer la réponse</button><button onClick={() => setNotice("Créneau proposé dans l’agenda")}>Proposer un créneau</button></div></div></section></section>
+    {(() => {
+      const threads = database.chats;
+      const selected = threads.find((thread) => thread.id === inboxThreadId) ?? threads[0];
+      if (!selected) return <section className="panel empty padded">Aucune conversation enregistrée.</section>;
+      const sendReply = (text: string) => {
+        const now = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+        const nextThreads = threads.map((thread) => thread.id === selected.id ? { ...thread, status: "Réponse enregistrée", lastMessage: text, time: "À l’instant", unread: 0, messages: [...thread.messages, { id: crypto.randomUUID(), sender: "coach" as const, text, time: now }] } : thread);
+        commit({ ...database, chats: nextThreads }, `Réponse ${selected.channel} enregistrée pour ${selected.name}`);
+      };
+      const proposeSlot = () => {
+        const contact = database.contacts.find((item) => item.name === selected.name);
+        const text = "Jeudi à 18 h est disponible. Je vous le réserve ?";
+        const nextThreads = threads.map((thread) => thread.id === selected.id ? { ...thread, status: "Créneau proposé", lastMessage: text, time: "À l’instant", unread: 0, messages: [...thread.messages, { id: crypto.randomUUID(), sender: "agent" as const, text, time: "À l’instant" }] } : thread);
+        const nextEvents = contact ? [{ id: crypto.randomUUID(), date: "À l’instant", label: "Créneau proposé", contact: contact.name, detail: `${selected.channel} · jeudi à 18 h` }, ...database.events] : database.events;
+        commit({ ...database, chats: nextThreads, events: nextEvents }, `Créneau proposé à ${selected.name}`);
+      };
+      return <section className="inbox-layout"><section className="panel inbox-list"><div className="panel-head"><div><h2>Conversations actives</h2><p>{threads.filter((thread) => thread.unread > 0).length} demandes nécessitent une action.</p></div></div>{threads.map((thread) => <button className={`thread ${thread.id === selected.id ? "active" : ""}`} key={thread.id} onClick={() => setInboxThreadId(thread.id)}><span className={`channel ${thread.channel.toLowerCase()}`}>{thread.channel === "WhatsApp" ? "◉" : thread.channel === "Email" ? "✉" : "◎"}</span><span><b>{thread.name}</b><small>{thread.lastMessage}</small></span>{thread.unread > 0 && <i className="unread-count">{thread.unread}</i>}<em>{thread.time}</em></button>)}</section><section className="panel conversation"><div className="panel-head"><div><h2>{selected.name} <span className="tag inscrit">Score 86</span></h2><p>{selected.stage} · {selected.channel} · {selected.status}</p></div></div><div className="conversation-body">{selected.messages.map((message) => <p className={message.sender === "member" ? "" : "reply"} key={message.id}><span>{message.text}</span><small>{message.time}</small></p>)}<div className="suggestions"><button onClick={() => sendReply("Merci pour votre message. Je reste disponible pour vous accompagner.")}>Envoyer la réponse</button><button onClick={proposeSlot}>Proposer un créneau</button></div></div></section></section>;
+    })()}
   </>;
 
   const Agenda = () => <>
