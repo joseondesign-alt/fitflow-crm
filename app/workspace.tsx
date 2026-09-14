@@ -6,6 +6,9 @@ import { useConvexSync } from "./convex-provider";
 
 type Stage = "Prospect" | "RDV" | "Essai" | "Inscrit" | "Résilié";
 type View = "Vue d’ensemble" | "Contacts" | "Parcours" | "Agent IA" | "Inbox" | "Agenda" | "Automatisations" | "Campagnes" | "Programmes" | "Finance";
+type ChatChannel = "WhatsApp" | "Email" | "Instagram";
+type ChatMessage = { id: string; sender: "member" | "coach" | "agent"; text: string; time: string };
+type ChatThread = { id: string; name: string; initials: string; channel: ChatChannel; status: string; lastMessage: string; time: string; unread: number; stage: Stage; messages: ChatMessage[] };
 type Contact = { id: string; name: string; email: string; phone: string; source: string; stage: Stage; next: string; activity: string };
 type EventItem = { id: string; date: string; label: string; contact: string; detail: string };
 type Automation = { id: string; service: "Airtable" | "Brevo" | "WhatsApp" | "Make"; name: string; status: "Actif" | "En pause"; lastRun: string };
@@ -13,7 +16,7 @@ type Program = { id: string; client: string; goal: string; frequency: string; st
 type Exercise = { id: string; name: string; muscle: string; equipment: string; level: "Débutant" | "Intermédiaire" | "Avancé"; prescription: string; cue: string; art: string };
 type WorkoutSession = { id: string; client: string; date: string; label: string; duration: string; completion: number; volume: string };
 type FinanceItem = { id: string; month: string; type: "CA" | "Charge"; category: string; amount: number };
-type Database = { contacts: Contact[]; events: EventItem[]; automations: Automation[]; programs: Program[]; workouts: WorkoutSession[]; finance: FinanceItem[] };
+type Database = { contacts: Contact[]; events: EventItem[]; automations: Automation[]; programs: Program[]; workouts: WorkoutSession[]; finance: FinanceItem[]; chats: ChatThread[] };
 
 const STORAGE_KEY = "fitflow-crm-portfolio-v2";
 const views: { name: View; icon: string }[] = [
@@ -30,6 +33,13 @@ const exerciseLibrary: Exercise[] = [
   { id: "ex-6", name: "Développé épaules", muscle: "Épaules", equipment: "Haltères", level: "Intermédiaire", prescription: "3 × 10 reps", cue: "Garder les côtes rentrées", art: "/fitness/athlete-dumbbell-press.png" },
   { id: "ex-7", name: "Planche active", muscle: "Core", equipment: "Poids du corps", level: "Débutant", prescription: "3 × 40 sec", cue: "Respirer sans creuser le bas du dos", art: "/fitness/athlete-plank-progress.png" },
   { id: "ex-8", name: "Rowing unilatéral", muscle: "Dos", equipment: "Haltère", level: "Avancé", prescription: "4 × 8 / côté", cue: "Initier le mouvement avec le coude", art: "/fitness/athlete-dumbbell-press.png" },
+];
+const initialChatThreads: ChatThread[] = [
+  { id: "lea", name: "Léa Dubois", initials: "LD", channel: "WhatsApp", status: "En ligne", lastMessage: "Peut-on décaler le RDV à jeudi ?", time: "Il y a 4 min", unread: 2, stage: "RDV", messages: [{ id: "lea-1", sender: "member", text: "Bonjour, peut-on décaler le RDV à jeudi ?", time: "09:42" }, { id: "lea-2", sender: "agent", text: "Je vérifie les disponibilités de l’équipe. Je vous propose un créneau dans un instant.", time: "09:43" }] },
+  { id: "thomas", name: "Thomas Bernard", initials: "TB", channel: "Email", status: "Actif il y a 18 min", lastMessage: "Quel abonnement choisir pour une reprise ?", time: "Il y a 18 min", unread: 1, stage: "Essai", messages: [{ id: "thomas-1", sender: "member", text: "Quel abonnement choisir pour une reprise sportive ?", time: "09:25" }, { id: "thomas-2", sender: "coach", text: "Je peux vous orienter vers l’offre Starter et prévoir une séance d’essai.", time: "09:28" }] },
+  { id: "julien", name: "Julien Moreau", initials: "JM", channel: "Instagram", status: "Actif il y a 32 min", lastMessage: "Je souhaite faire une séance d’essai.", time: "Il y a 32 min", unread: 0, stage: "Prospect", messages: [{ id: "julien-1", sender: "member", text: "Je souhaite faire une séance d’essai.", time: "09:11" }, { id: "julien-2", sender: "agent", text: "Avec plaisir ! Je peux vous proposer une première séance cette semaine.", time: "09:12" }] },
+  { id: "clara", name: "Clara Petit", initials: "CP", channel: "WhatsApp", status: "Actif hier", lastMessage: "Mon programme est-il prêt ?", time: "Hier", unread: 0, stage: "Inscrit", messages: [{ id: "clara-1", sender: "member", text: "Mon programme personnalisé est-il prêt ?", time: "Hier" }, { id: "clara-2", sender: "coach", text: "Il est en validation coach. Je vous préviens dès qu’il est disponible.", time: "Hier" }] },
+  { id: "sophie", name: "Sophie Renaud", initials: "SR", channel: "Email", status: "Actif il y a 2 h", lastMessage: "Je confirme ma visite du studio.", time: "Il y a 2 h", unread: 0, stage: "RDV", messages: [{ id: "sophie-1", sender: "member", text: "Je confirme ma visite du studio.", time: "07:50" }, { id: "sophie-2", sender: "agent", text: "Parfait, votre visite est bien enregistrée dans l’agenda.", time: "07:51" }] },
 ];
 const initialDatabase: Database = {
   contacts: [
@@ -65,6 +75,7 @@ const initialDatabase: Database = {
     { id: "f3", month: "2026-08", type: "Charge", category: "Loyer", amount: 2200 },
     { id: "f4", month: "2026-08", type: "Charge", category: "Publicité", amount: 1450 },
   ],
+  chats: initialChatThreads,
 };
 
 function useMountEffect(effect: () => void | (() => void)) {
@@ -97,7 +108,7 @@ export function FitFlowWorkspace() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<Database>;
-      setDatabase({ ...initialDatabase, ...parsed, workouts: parsed.workouts ?? initialDatabase.workouts });
+      setDatabase({ ...initialDatabase, ...parsed, workouts: parsed.workouts ?? initialDatabase.workouts, chats: parsed.chats ?? initialDatabase.chats });
     }
   });
 
@@ -105,9 +116,17 @@ export function FitFlowWorkspace() {
     if (!convex.snapshot || typeof convex.snapshot !== "object") return;
     const remote = convex.snapshot as Partial<Database>;
     if (!Array.isArray(remote.contacts) || !Array.isArray(remote.events)) return;
-    setDatabase({ ...initialDatabase, ...remote, workouts: remote.workouts ?? initialDatabase.workouts });
+    setDatabase({ ...initialDatabase, ...remote, workouts: remote.workouts ?? initialDatabase.workouts, chats: remote.chats ?? initialDatabase.chats });
     setNotice("Données synchronisées avec Convex");
   }, [convex.snapshot]);
+
+  const convexSeeded = useRef(false);
+  useEffect(() => {
+    if (!convex.connected || convex.syncing || convex.snapshot !== null || convexSeeded.current) return;
+    convexSeeded.current = true;
+    void convex.saveSnapshot(database).then(() => setNotice("Base Convex initialisée avec les données du studio"))
+      .catch(() => { convexSeeded.current = false; setNotice("Convex indisponible · sauvegarde locale conservée"); });
+  }, [convex.connected, convex.syncing, convex.snapshot, convex.saveSnapshot, database]);
 
   const commit = (next: Database, message: string) => {
     setDatabase(next);
@@ -194,7 +213,12 @@ export function FitFlowWorkspace() {
   const resetDemo = () => {
     window.localStorage.removeItem(STORAGE_KEY);
     setDatabase(initialDatabase);
+    if (convex.connected) void convex.clearSnapshot().catch(() => setNotice("Convex indisponible · données locales réinitialisées"));
     setNotice("Démonstration réinitialisée");
+  };
+
+  const persistChatThreads = (threads: ChatThread[], message: string) => {
+    commit({ ...database, chats: threads }, message);
   };
 
   const Overview = () => <>
@@ -287,7 +311,7 @@ export function FitFlowWorkspace() {
   if (activeView === "Finance") content = <Finance />;
 
   const pickMobileView = (view: View) => { setActiveView(view); setMobileMoreOpen(false); };
-  return <div className="shell"><aside className="sidebar"><div className="brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={44} height={44} priority /><div><b>FitFlow CRM</b><small>Command center</small></div></div><nav>{views.map((view) => <button key={view.name} className={activeView === view.name ? "nav active" : "nav"} onClick={() => setActiveView(view.name)}><span>{view.icon}</span>{view.name}</button>)}</nav><div className="side-actions"><button className="nav" onClick={() => setChatOpen(true)}><span>◌</span>Assistant CRM</button><button className="nav" onClick={resetDemo}><span>↺</span>Réinitialiser l’espace</button></div></aside><main><header className="topbar"><div className="mobile-brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={32} height={32} priority /><b>FitFlow CRM</b></div><div className="top-actions"><span className={`sync-pill ${convex.connected ? "connected" : "local"}`} title={convex.connected ? "Synchronisation temps réel active" : "Ajoutez NEXT_PUBLIC_CONVEX_URL pour activer la base Convex"}><i />{convex.connected ? (convex.syncing ? "Connexion Convex…" : "Convex synchronisé") : "Mode démo local"}</span><button className="button outline" onClick={() => setChatOpen(true)}>◌ Assistant</button><button className="button" onClick={() => setEventOpen(true)}>＋ Nouvel événement</button></div></header><div className="content">{content}</div><nav className="mobile-nav">{views.slice(0, 4).map((view) => <button key={view.name} className={activeView === view.name ? "active" : ""} onClick={() => pickMobileView(view.name)}><span>{view.icon}</span>{view.name.replace("Vue d’ensemble", "Accueil")}</button>)}<button className={mobileMoreOpen ? "active" : ""} onClick={() => setMobileMoreOpen(true)}><span>☰</span>Plus</button></nav></main>{mobileMoreOpen && <MobileMoreMenu views={views.slice(4)} activeView={activeView} onPick={pickMobileView} onClose={() => setMobileMoreOpen(false)} />}{eventOpen && <EventModal contacts={database.contacts} onClose={() => setEventOpen(false)} onSubmit={createEvent} />}{contactOpen && <ContactModal onClose={() => setContactOpen(false)} onSubmit={createContact} />}{chatOpen && <ChatModal onClose={() => setChatOpen(false)} onCreate={() => { setEventOpen(true); setChatOpen(false); }} />}</div>;
+  return <div className="shell"><aside className="sidebar"><div className="brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={44} height={44} priority /><div><b>FitFlow CRM</b><small>Command center</small></div></div><nav>{views.map((view) => <button key={view.name} className={activeView === view.name ? "nav active" : "nav"} onClick={() => setActiveView(view.name)}><span>{view.icon}</span>{view.name}</button>)}</nav><div className="side-actions"><button className="nav" onClick={() => setChatOpen(true)}><span>◌</span>Assistant CRM</button><button className="nav" onClick={resetDemo}><span>↺</span>Réinitialiser l’espace</button></div></aside><main><header className="topbar"><div className="mobile-brand"><Image src="/fitflow-logo.png" alt="FitFlow" width={32} height={32} priority /><b>FitFlow CRM</b></div><div className="top-actions"><span className={`sync-pill ${convex.connected ? "connected" : "local"}`} title={convex.connected ? "Synchronisation temps réel active" : "Ajoutez NEXT_PUBLIC_CONVEX_URL pour activer la base Convex"}><i />{convex.connected ? (convex.syncing ? "Connexion Convex…" : "Convex synchronisé") : "Mode démo local"}</span><button className="button outline" onClick={() => setChatOpen(true)}>◌ Assistant</button><button className="button" onClick={() => setEventOpen(true)}>＋ Nouvel événement</button></div></header><div className="content">{content}</div><nav className="mobile-nav">{views.slice(0, 4).map((view) => <button key={view.name} className={activeView === view.name ? "active" : ""} onClick={() => pickMobileView(view.name)}><span>{view.icon}</span>{view.name.replace("Vue d’ensemble", "Accueil")}</button>)}<button className={mobileMoreOpen ? "active" : ""} onClick={() => setMobileMoreOpen(true)}><span>☰</span>Plus</button></nav></main>{mobileMoreOpen && <MobileMoreMenu views={views.slice(4)} activeView={activeView} onPick={pickMobileView} onClose={() => setMobileMoreOpen(false)} />}{eventOpen && <EventModal contacts={database.contacts} onClose={() => setEventOpen(false)} onSubmit={createEvent} />}{contactOpen && <ContactModal onClose={() => setContactOpen(false)} onSubmit={createContact} />}{chatOpen && <ChatModal initialThreads={database.chats} onThreadsChange={persistChatThreads} onClose={() => setChatOpen(false)} onCreate={() => { setEventOpen(true); setChatOpen(false); }} />}</div>;
 }
 
 function Metric({ label, value, change }: { label: string; value: string; change: string }) { return <article className="metric"><small>{label}</small><strong>{value}</strong><span>↗ {change}</span></article>; }
@@ -300,20 +324,8 @@ function AgentOrb({ large = false }: { large?: boolean }) { const canvasRef = us
 function EventModal({ contacts, onClose, onSubmit }: { contacts: Contact[]; onClose: () => void; onSubmit: (form: FormData) => void }) { return <Modal title="Nouvel événement" detail="Un événement actualise le parcours et le journal CRM." onClose={onClose}><form action={onSubmit} className="modal-form"><label>Contact<select name="contact" required><option value="">Choisir un contact</option>{contacts.map((contact) => <option value={contact.id} key={contact.id}>{contact.name}</option>)}</select></label><label>Événement<select name="type"><option>RDV planifié</option><option>Essai réalisé</option><option>Inscription client</option><option>Résiliation</option></select></label><label>Note interne<textarea name="note" placeholder="Ex. RDV confirmé par téléphone" /></label><div className="notice"><b>Automatisations prévues</b><span>Airtable, Brevo, WhatsApp et Make sont ajoutés au journal de simulation.</span></div><button className="button" type="submit">Enregistrer l’événement</button></form></Modal>; }
 function ContactModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (form: FormData) => void }) { return <Modal title="Ajouter un contact" detail="Le contact devient un prospect et rejoint le parcours." onClose={onClose}><form action={onSubmit} className="modal-form"><label>Nom complet<input name="name" required placeholder="Ex. Chloé Martin" /></label><label>Email<input name="email" type="email" required placeholder="chloe@exemple.fr" /></label><label>Téléphone<input name="phone" placeholder="06 00 00 00 00" /></label><label>Source<select name="source"><option>Site web</option><option>Google</option><option>Instagram</option><option>Parrainage</option><option>Saisie interne</option></select></label><button className="button" type="submit">Créer le prospect</button></form></Modal>; }
 function MobileMoreMenu({ views, activeView, onPick, onClose }: { views: { name: View; icon: string }[]; activeView: View; onPick: (view: View) => void; onClose: () => void }) { return <div className="mobile-more-backdrop" onClick={onClose}><section className="mobile-more" onClick={(event) => event.stopPropagation()}><header><div><b>Autres espaces</b><small>Outils de pilotage premium</small></div><button className="icon-button" onClick={onClose}>×</button></header><div>{views.map((view) => <button key={view.name} className={activeView === view.name ? "active" : ""} onClick={() => onPick(view.name)}><span>{view.icon}</span><b>{view.name}</b><i>→</i></button>)}</div></section></div>; }
-type ChatChannel = "WhatsApp" | "Email" | "Instagram";
-type ChatMessage = { id: string; sender: "member" | "coach" | "agent"; text: string; time: string };
-type ChatThread = { id: string; name: string; initials: string; channel: ChatChannel; status: string; lastMessage: string; time: string; unread: number; stage: Stage; messages: ChatMessage[] };
-
-const initialChatThreads: ChatThread[] = [
-  { id: "lea", name: "Léa Dubois", initials: "LD", channel: "WhatsApp", status: "En ligne", lastMessage: "Peut-on décaler le RDV à jeudi ?", time: "Il y a 4 min", unread: 2, stage: "RDV", messages: [{ id: "lea-1", sender: "member", text: "Bonjour, peut-on décaler le RDV à jeudi ?", time: "09:42" }, { id: "lea-2", sender: "agent", text: "Je vérifie les disponibilités de l’équipe. Je vous propose un créneau dans un instant.", time: "09:43" }] },
-  { id: "thomas", name: "Thomas Bernard", initials: "TB", channel: "Email", status: "Actif il y a 18 min", lastMessage: "Quel abonnement choisir pour une reprise ?", time: "Il y a 18 min", unread: 1, stage: "Essai", messages: [{ id: "thomas-1", sender: "member", text: "Quel abonnement choisir pour une reprise sportive ?", time: "09:25" }, { id: "thomas-2", sender: "coach", text: "Je peux vous orienter vers l’offre Starter et prévoir une séance d’essai.", time: "09:28" }] },
-  { id: "julien", name: "Julien Moreau", initials: "JM", channel: "Instagram", status: "Actif il y a 32 min", lastMessage: "Je souhaite faire une séance d’essai.", time: "Il y a 32 min", unread: 0, stage: "Prospect", messages: [{ id: "julien-1", sender: "member", text: "Je souhaite faire une séance d’essai.", time: "09:11" }, { id: "julien-2", sender: "agent", text: "Avec plaisir ! Je peux vous proposer une première séance cette semaine.", time: "09:12" }] },
-  { id: "clara", name: "Clara Petit", initials: "CP", channel: "WhatsApp", status: "Actif hier", lastMessage: "Mon programme est-il prêt ?", time: "Hier", unread: 0, stage: "Inscrit", messages: [{ id: "clara-1", sender: "member", text: "Mon programme personnalisé est-il prêt ?", time: "Hier" }, { id: "clara-2", sender: "coach", text: "Il est en validation coach. Je vous préviens dès qu’il est disponible.", time: "Hier" }] },
-  { id: "sophie", name: "Sophie Renaud", initials: "SR", channel: "Email", status: "Actif il y a 2 h", lastMessage: "Je confirme ma visite du studio.", time: "Il y a 2 h", unread: 0, stage: "RDV", messages: [{ id: "sophie-1", sender: "member", text: "Je confirme ma visite du studio.", time: "07:50" }, { id: "sophie-2", sender: "agent", text: "Parfait, votre visite est bien enregistrée dans l’agenda.", time: "07:51" }] },
-];
-
-function ChatModal({ onClose, onCreate }: { onClose: () => void; onCreate: () => void }) {
-  const [threads, setThreads] = useState(initialChatThreads);
+function ChatModal({ onClose, onCreate, initialThreads, onThreadsChange }: { onClose: () => void; onCreate: () => void; initialThreads: ChatThread[]; onThreadsChange: (threads: ChatThread[], message: string) => void }) {
+  const [threads, setThreads] = useState<ChatThread[]>(initialThreads.length ? initialThreads : initialChatThreads);
   const [selectedId, setSelectedId] = useState("lea");
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
@@ -324,10 +336,20 @@ function ChatModal({ onClose, onCreate }: { onClose: () => void; onCreate: () =>
   const selected = threads.find((thread) => thread.id === selectedId) ?? threads[0];
   const filteredThreads = threads.filter((thread) => `${thread.name} ${thread.lastMessage} ${thread.channel}`.toLowerCase().includes(query.toLowerCase()));
 
+  useEffect(() => {
+    if (initialThreads.length) setThreads(initialThreads);
+  }, [initialThreads]);
+
+  const updateThreads = (next: ChatThread[], message: string) => {
+    setThreads(next);
+    onThreadsChange(next, message);
+  };
+
   const selectThread = (thread: ChatThread) => {
     setSelectedId(thread.id);
     setMobileDetail(true);
-    setThreads((current) => current.map((item) => item.id === thread.id ? { ...item, unread: 0 } : item));
+    const next = threads.map((item) => item.id === thread.id ? { ...item, unread: 0 } : item);
+    updateThreads(next, `${thread.name} ouverte dans l’inbox`);
   };
   const sendMessage = () => {
     const text = draft.trim();
@@ -335,7 +357,8 @@ function ChatModal({ onClose, onCreate }: { onClose: () => void; onCreate: () =>
     const reply = text.toLowerCase().includes("rdv") || text.toLowerCase().includes("rendez")
       ? "Je regarde les créneaux disponibles et je vous propose la meilleure option."
       : "Bien reçu. Je l’ajoute au suivi CRM et je prépare la prochaine action pour l’équipe.";
-    setThreads((current) => current.map((thread) => thread.id === selected.id ? { ...thread, lastMessage: text, time: "À l’instant", messages: [...thread.messages, { id: crypto.randomUUID(), sender: "coach", text, time: "À l’instant" }, { id: crypto.randomUUID(), sender: "agent", text: reply, time: "À l’instant" }] } : thread));
+    const next: ChatThread[] = threads.map((thread) => thread.id === selected.id ? { ...thread, lastMessage: text, time: "À l’instant", status: "En ligne", messages: [...thread.messages, { id: crypto.randomUUID(), sender: "coach" as const, text, time: "À l’instant" }, { id: crypto.randomUUID(), sender: "agent" as const, text: reply, time: "À l’instant" }] } : thread);
+    updateThreads(next, `Message enregistré pour ${selected.name}`);
     setDraft("");
   };
   const startNewChat = (event: React.FormEvent<HTMLFormElement>) => {
@@ -345,7 +368,7 @@ function ChatModal({ onClose, onCreate }: { onClose: () => void; onCreate: () =>
     const initialsValue = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
     const id = crypto.randomUUID();
     const thread: ChatThread = { id, name, initials: initialsValue, channel: newChatChannel, status: "Nouveau contact", lastMessage: "Conversation créée", time: "À l’instant", unread: 0, stage: "Prospect", messages: [{ id: crypto.randomUUID(), sender: "agent", text: `Bonjour ${name}, comment puis-je vous aider dans votre parcours sportif ?`, time: "À l’instant" }] };
-    setThreads((current) => [thread, ...current]);
+    updateThreads([thread, ...threads], `Conversation créée avec ${name}`);
     setSelectedId(id);
     setNewChatName("");
     setNewChatOpen(false);

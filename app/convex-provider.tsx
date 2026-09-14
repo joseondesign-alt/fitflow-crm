@@ -9,6 +9,7 @@ type ConvexSyncContextValue = {
   syncing: boolean;
   snapshot: unknown;
   saveSnapshot: (database: unknown) => Promise<void>;
+  clearSnapshot: () => Promise<void>;
 };
 
 const fallback: ConvexSyncContextValue = {
@@ -16,6 +17,7 @@ const fallback: ConvexSyncContextValue = {
   syncing: false,
   snapshot: null,
   saveSnapshot: async () => undefined,
+  clearSnapshot: async () => undefined,
 };
 
 const ConvexSyncContext = createContext<ConvexSyncContextValue>(fallback);
@@ -30,15 +32,20 @@ function parseSnapshot(remote: unknown) {
 function ConnectedConvex({ children }: { children: ReactNode }) {
   const remote = useQuery(api.crm.getSnapshot);
   const replace = useMutation(api.crm.replaceSnapshot);
+  const clear = useMutation(api.crm.clearSnapshot);
   const saveSnapshot = useCallback(async (database: unknown) => {
     await replace({ payload: JSON.stringify(database) });
   }, [replace]);
+  const clearSnapshot = useCallback(async () => {
+    await clear({});
+  }, [clear]);
   const value = useMemo<ConvexSyncContextValue>(() => ({
     connected: true,
     syncing: remote === undefined,
     snapshot: parseSnapshot(remote),
     saveSnapshot,
-  }), [remote, saveSnapshot]);
+    clearSnapshot,
+  }), [remote, saveSnapshot, clearSnapshot]);
   return <ConvexSyncContext.Provider value={value}>{children}</ConvexSyncContext.Provider>;
 }
 
